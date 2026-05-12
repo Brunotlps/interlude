@@ -1,0 +1,9 @@
+server:
+  port: 8080
+
+# Implement Routes []Route
+routes:
+  - prefix: "/api/users"
+    backend: "https://httpbin.org"
+  - prefix: "/api"
+    backend: "https://httpbin.org"

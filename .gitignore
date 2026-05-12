@@ -1,0 +1,21 @@
+# Compiled binary
+gateway
+*.exe
+*.out
+
+# Test artifacts
+*.test
+coverage.out
+
+# Environment
+.env
+.env.*
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Claude code
+.claude
+CLAUDE.md
