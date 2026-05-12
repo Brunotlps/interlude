@@ -22,10 +22,21 @@ type ServerConfig struct {
 	Port int `yaml:"port"`
 }
 
+type AuthConfig struct {
+	APIKeys []string `yaml:"api_keys"`
+}
+
+type RateLimitConfig struct {
+	RequestsPerSecond float64 `yaml:"requests_per_second"`
+	Burst             float64 `yaml:"burst"`
+}
+
 // Root settings structure (exactly mirrors the structure of config.yaml)
 type Config struct {
-	Server ServerConfig `yaml:"server"`
-	Routes []Route      `yaml:"routes"`
+	Server    ServerConfig    `yaml:"server"`
+	Auth      AuthConfig      `yaml:"auth"`
+	RateLimit RateLimitConfig `yaml:"rate_limit"`
+	Routes    []Route         `yaml:"routes"`
 }
 
 func Load(path string) (*Config, error) {

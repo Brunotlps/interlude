@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"interlude/internal/config"
 	"interlude/internal/proxy"
-	"log"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 )
 
 type route struct {
@@ -34,7 +33,7 @@ func New(cfg *config.Config) (*Router, error) {
 		}
 
 		routes = append(routes, route{prefix: r.Prefix, handler: handler})
-		log.Printf("[ROUTE] %s -> %s", r.Prefix, r.Backend)
+		slog.Info("route registered", "prefix", r.Prefix, "backend", r.Backend)
 	}
 
 	sort.Slice(routes, func(i, j int) bool {
@@ -47,18 +46,14 @@ func New(cfg *config.Config) (*Router, error) {
 // ServeHTTP implements http.Handler.
 // Called for every request that arrives at the gateway.
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-
 	for _, route := range rt.routes {
 		if strings.HasPrefix(r.URL.Path, route.prefix) {
-			log.Printf("[REQUEST] %s %s -> routed to %s", r.Method, r.URL.Path, route.prefix)
 			route.handler.ServeHTTP(w, r)
-			log.Printf("[COMPLETED] %s %s in %v", r.Method, r.URL.Path, time.Since(start))
 			return
 		}
 	}
 
-	log.Printf("[NOT FOUND] %s %s - no matching route", r.Method, r.URL.Path)
+	slog.Warn("no matching route", "method", r.Method, "path", r.URL.Path)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotFound)
 	fmt.Fprintf(w, `{"error": "route not found", "path": "%s"}`, r.URL.Path)

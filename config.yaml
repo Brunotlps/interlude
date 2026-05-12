@@ -1,7 +1,15 @@
 server:
   port: 8080
 
-# Implement Routes []Route
+auth:
+  api_keys:
+    - "key-abc-123"
+    - "key-xyz-789"
+
+rate_limit:
+  requests_per_second: 10
+  burst: 20
+
 routes:
   - prefix: "/api/users"
     backend: "https://httpbin.org"
