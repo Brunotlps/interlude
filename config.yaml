@@ -12,6 +12,19 @@ rate_limit:
 
 routes:
   - prefix: "/api/users"
-    backend: "https://httpbin.org"
-  - prefix: "/api"
-    backend: "https://httpbin.org"
+    backends:
+      - "http://localhost:3001"
+      - "http://localhost:3002"
+      - "http://localhost:3003"
+
+health_check:
+  interval: 10s
+  timeout: 5s
+  path: "/health"
+
+circuit_breaker:
+  max_failures: 5
+  recovery_timeout: 30s
+
+retry:
+  max_attempts: 3

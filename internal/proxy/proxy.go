@@ -2,41 +2,62 @@ package proxy
 
 import (
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
+	"time"
 )
 
-// Create an http.Handler that works as reverse proxy for the informed backend
-func New(backendURL string) (http.Handler, error) {
+type Proxy struct {
+	target *url.URL
+	client *http.Client
+}
 
-	// Converts a string into a url.URL struct
-	// Validates the URL and separates scheme, host, port, path,...
+func New(backendURL string) (*Proxy, error) {
+
 	target, err := url.Parse(backendURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing backend URL %q: %w", backendURL, err)
 	}
+	return &Proxy{
+		target: target,
+		client: &http.Client{Timeout: 30 * time.Second},
+	}, nil
 
-	proxy := &httputil.ReverseProxy{
-		Rewrite: func(r *httputil.ProxyRequest) {
+}
 
-			r.SetURL(target)                           // Defines the target schema, host and path
-			r.Out.Host = r.In.Host                     // Preserves the original host
-			r.SetXForwarded()                          // Correctly sets X-Forwarded-For, X-Forwarded-Host and X-Forwarded-Proto safely
-			r.Out.Header.Set("X-Gateway", "interlude") // Adds a custom header to the request that will be sent to the backend
-
-		},
+func (p *Proxy) Do(r *http.Request) (*http.Response, error) {
+	out, err := http.NewRequestWithContext(r.Context(), r.Method, p.target.String()+r.URL.RequestURI(), r.Body)
+	if err != nil {
+		return nil, fmt.Errorf("building request: %w", err)
 	}
 
-	// Error Handler in case of backend failure
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("[ERROR] Failed proxy to: %s: %v", backendURL, err)
+	for k, v := range r.Header {
+		out.Header[k] = v
+	}
+	out.Header.Set("X-Forwarded-For", r.RemoteAddr)
+	out.Header.Set("X-Gateway", "interlude")
+
+	return p.client.Do(out)
+}
+
+func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	resp, err := p.Do(r)
+	if err != nil {
+		slog.Error("proxy: backend unreachable", "backend", p.target.Host, "err", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte(`{"error": "backend unavailable", "status": 502}`))
+		fmt.Fprintf(w, `{"error": "backend unavailable"}`)
+		return
 	}
+	defer resp.Body.Close()
 
-	return proxy, nil
-
+	for k, v := range resp.Header {
+		for _, vv := range v {
+			w.Header().Add(k, vv)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
