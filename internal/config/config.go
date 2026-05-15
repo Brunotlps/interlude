@@ -29,7 +29,8 @@ type Route struct {
 
 // HTTP server configs
 type ServerConfig struct {
-	Port int `yaml:"port"`
+	Port        int `yaml:"port"`
+	MetricsPort int `yaml:"metrics_port"`
 }
 
 type AuthConfig struct {
@@ -70,7 +71,7 @@ func Load(path string) (*Config, error) {
 
 	// Initializes default Config
 	cfg := &Config{
-		Server: ServerConfig{Port: 8080},
+		Server: ServerConfig{Port: 8080, MetricsPort: 9091},
 		HealthCheck: HealthCheckConfig{
 			Interval: 10 * time.Second,
 			Timeout:  5 * time.Second,

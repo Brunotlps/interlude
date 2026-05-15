@@ -1,5 +1,6 @@
 server:
   port: 8080
+  metrics_port: 9091
 
 auth:
   api_keys:

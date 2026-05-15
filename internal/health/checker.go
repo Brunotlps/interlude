@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"interlude/internal/metrics"
 	"log/slog"
 	"net/http"
 	"sync/atomic"
@@ -58,6 +59,7 @@ func (c *Checker) probe(ctx context.Context, b *Backend) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.URL+c.path, nil)
 	if err != nil {
 		b.SetHealthy(false)
+		metrics.BackendHealth.WithLabelValues(b.URL).Set(0)
 		slog.Warn("health check: failed to build request", "backend", b.URL, "err", err)
 		return
 	}
@@ -66,6 +68,7 @@ func (c *Checker) probe(ctx context.Context, b *Backend) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		b.SetHealthy(false)
+		metrics.BackendHealth.WithLabelValues(b.URL).Set(0)
 		slog.Warn("health check: unreachable", "backend", b.URL, "err", err)
 		return
 	}
@@ -75,6 +78,11 @@ func (c *Checker) probe(ctx context.Context, b *Backend) {
 	wasHealthy := b.IsHealthy()
 	isHealthy := resp.StatusCode < 500
 	b.SetHealthy(isHealthy)
+	if isHealthy {
+		metrics.BackendHealth.WithLabelValues(b.URL).Set(1.0)
+	} else {
+		metrics.BackendHealth.WithLabelValues(b.URL).Set(0)
+	}
 
 	if wasHealthy != isHealthy {
 		if isHealthy {

@@ -9,8 +9,10 @@
 package middleware
 
 import (
+	"interlude/internal/metrics"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -36,7 +38,13 @@ func Logging(next http.Handler) http.Handler {
 		start := time.Now()
 		rw := newResponseWriter(w)
 
+		metrics.ActiveRequests.Inc()
+		defer metrics.ActiveRequests.Dec()
+
 		next.ServeHTTP(rw, r)
+
+		metrics.RequestsTotal.WithLabelValues(r.Method, r.URL.Path, strconv.Itoa(rw.statusCode)).Inc()
+		metrics.RequestDuration.WithLabelValues(r.Method, r.URL.Path).Observe(time.Since(start).Seconds())
 
 		level := slog.LevelInfo
 		if rw.statusCode >= 500 {

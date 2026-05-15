@@ -1,6 +1,7 @@
 package breaker
 
 import (
+	"interlude/internal/metrics"
 	"sync/atomic"
 	"time"
 )
@@ -14,6 +15,7 @@ const (
 )
 
 type CircuitBreaker struct {
+	name         string
 	state        atomic.Int32
 	failures     atomic.Int32
 	maxFailures  int32
@@ -21,8 +23,9 @@ type CircuitBreaker struct {
 	recoveryTime time.Duration
 }
 
-func New(maxFailures int32, recoveryTime time.Duration) *CircuitBreaker {
+func New(name string, maxFailures int32, recoveryTime time.Duration) *CircuitBreaker {
 	return &CircuitBreaker{
+		name:         name,
 		maxFailures:  maxFailures,
 		recoveryTime: recoveryTime,
 	}
@@ -42,7 +45,10 @@ func (cb *CircuitBreaker) Allow() bool {
 		if time.Since(openedAt) < cb.recoveryTime {
 			return false
 		}
-		return cb.state.CompareAndSwap(int32(StateOpen), int32(StateHalfOpen)) // CompareAndSwap(old, new)
+		if cb.state.CompareAndSwap(int32(StateOpen), int32(StateHalfOpen)) {
+			metrics.CircuitBreakerState.WithLabelValues(cb.name).Set(float64(StateHalfOpen))
+			return true
+		}
 	}
 	return false
 }
@@ -50,6 +56,7 @@ func (cb *CircuitBreaker) Allow() bool {
 func (cb *CircuitBreaker) RecordFailure() {
 
 	if cb.state.CompareAndSwap(int32(StateHalfOpen), int32(StateOpen)) {
+		metrics.CircuitBreakerState.WithLabelValues(cb.name).Set(float64(1))
 		cb.openedAt.Store(time.Now().UnixNano())
 		cb.failures.Store(0)
 		return
@@ -58,6 +65,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 	failures := cb.failures.Add(1)
 	if failures >= cb.maxFailures {
 		if cb.state.CompareAndSwap(int32(StateClosed), int32(StateOpen)) {
+			metrics.CircuitBreakerState.WithLabelValues(cb.name).Set(float64(1))
 			cb.openedAt.Store(time.Now().UnixNano())
 			cb.failures.Store(0)
 		}
@@ -66,6 +74,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 
 func (cb *CircuitBreaker) RecordSuccess() {
 	if cb.state.CompareAndSwap(int32(StateHalfOpen), int32(StateClosed)) {
+		metrics.CircuitBreakerState.WithLabelValues(cb.name).Set(float64(0))
 		cb.failures.Store(0)
 	}
 }
