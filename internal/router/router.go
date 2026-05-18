@@ -50,7 +50,7 @@ func New(ctx context.Context, cfg *config.Config) (*Router, error) {
 				return nil, fmt.Errorf("creating proxy for %s: %w", url, err)
 			}
 			proxies[url] = p
-			breakers[url] = breaker.New(cfg.CircuitBreaker.MaxFailures, cfg.CircuitBreaker.RecoveryTimeout)
+			breakers[url] = breaker.New(url, cfg.CircuitBreaker.MaxFailures, cfg.CircuitBreaker.RecoveryTimeout)
 		}
 		bal := balancer.New(backends)
 		routes = append(routes, route{prefix: r.Prefix, balancer: bal, proxies: proxies, breakers: breakers})
