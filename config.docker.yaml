@@ -1,0 +1,31 @@
+server:
+  port: 8080
+  metrics_port: 9091
+
+auth:
+  api_keys:
+    - "key-abc-123"
+    - "key-xyz-789"
+
+rate_limit:
+  requests_per_second: 10
+  burst: 20
+
+routes:
+  - prefix: "/api/users"
+    backends:
+      - "http://backend1:3001"
+      - "http://backend2:3002"
+      - "http://backend3:3003"
+
+health_check:
+  interval: 10s
+  timeout: 5s
+  path: "/"
+
+circuit_breaker:
+  max_failures: 5
+  recovery_timeout: 30s
+
+retry:
+  max_attempts: 3

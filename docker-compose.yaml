@@ -1,0 +1,43 @@
+services: 
+  backend1:
+    image: python:3-alpine
+    command: python /app/backend.py 3001
+    volumes:
+      - ./backend.py:/app/backend.py
+  backend2:
+    image: python:3-alpine
+    command: python /app/backend.py 3002
+    volumes:
+      - ./backend.py:/app/backend.py
+  backend3:
+    image: python:3-alpine
+    command: python /app/backend.py 3003
+    volumes:
+      - ./backend.py:/app/backend.py
+  gateway:
+    build: .
+    ports:
+      - "8080:8080"
+      - "9091:9091"
+    environment:
+      - CONFIG_PATH=/config.docker.yaml
+    volumes:
+      - ./config.docker.yaml:/config.docker.yaml
+    depends_on:
+      - backend1
+      - backend2
+      - backend3
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - gateway
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
