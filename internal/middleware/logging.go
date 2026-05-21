@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-type wrappedWriter struct {
+type wrappedWriter struct { 
 	http.ResponseWriter // Embeds the interface
 	statusCode          int
 }

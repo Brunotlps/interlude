@@ -24,11 +24,13 @@ type CircuitBreaker struct {
 }
 
 func New(name string, maxFailures int32, recoveryTime time.Duration) *CircuitBreaker {
-	return &CircuitBreaker{
+	cb := &CircuitBreaker{
 		name:         name,
 		maxFailures:  maxFailures,
 		recoveryTime: recoveryTime,
 	}
+	metrics.CircuitBreakerState.WithLabelValues(name).Set(float64(StateClosed))
+	return cb
 }
 
 func (cb *CircuitBreaker) Allow() bool {
