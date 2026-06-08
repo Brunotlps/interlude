@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"interlude/internal/config"
 	"interlude/internal/middleware"
@@ -10,6 +11,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	_ "interlude/internal/metrics"
 
@@ -17,8 +21,6 @@ import (
 )
 
 func main() {
-
-	// Configures the logger
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
 	configPath := os.Getenv("CONFIG_PATH")
@@ -26,24 +28,19 @@ func main() {
 		configPath = "config.yaml"
 	}
 
-	// Load configuration from YAML file
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
 
 	rt, err := router.New(ctx, cfg)
 	if err != nil {
 		log.Fatalf("Failed to create router: %v", err)
 	}
 
-	// Set the server address
-	addr := fmt.Sprintf(":%d", cfg.Server.Port)
-
-	// wiring
 	validKeys := make(map[string]struct{}, len(cfg.Auth.APIKeys))
 	for _, k := range cfg.Auth.APIKeys {
 		validKeys[k] = struct{}{}
@@ -61,20 +58,46 @@ func main() {
 		),
 	)
 
-	slog.Info("gateway started", "addr", addr)
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler: handler,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	metricsSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Server.MetricsPort),
+		Handler: mux,
+	}
 
 	go func() {
-		mux := http.NewServeMux()
-		mux.Handle("/metrics", promhttp.Handler())
-		metricsAddr := fmt.Sprintf(":%d", cfg.Server.MetricsPort)
-		slog.Info("metrics server started", "addr", metricsAddr)
-		if err := http.ListenAndServe(metricsAddr, mux); err != nil {
+		slog.Info("metrics server started", "addr", metricsSrv.Addr)
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("metrics server failed: %v", err)
 		}
 	}()
 
-	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	go func() {
+		slog.Info("gateway started", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("gateway server failed: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	stop() // release signal resources
+
+	slog.Info("shutdown signal received, draining connections")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("gateway shutdown error", "err", err)
+	}
+	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("metrics server shutdown error", "err", err)
 	}
 
+	slog.Info("shutdown complete")
 }
