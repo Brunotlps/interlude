@@ -17,6 +17,7 @@ Built as a learning project to deeply understand how gateway infrastructure work
 - **Rate limiting** — token bucket per gateway instance
 - **Authentication** — API key middleware via `X-API-Key` header
 - **Structured logging** — JSON output via `log/slog`
+- **Graceful shutdown** — SIGTERM/SIGINT drains in-flight requests with a 30s deadline before exit
 - **Prometheus metrics** — request counters, latency histograms, backend health and circuit breaker state gauges
 - **Docker** — multi-stage build, static binary, ~17MB final image on `scratch`
 
@@ -126,6 +127,8 @@ All metrics are exposed at `:9091/metrics` in Prometheus text format.
 |--------|------|--------|-------------|
 | `gateway_requests_total` | Counter | `method`, `path`, `status` | Total proxied requests |
 | `gateway_request_duration_seconds` | Histogram | `method`, `path` | Request latency |
+
+> `path` is normalized to the matched route prefix (e.g. `/api/users`, not `/api/users/42`) to prevent high-cardinality label explosion in Prometheus.
 | `gateway_backend_health` | Gauge | `backend` | Backend health (1=healthy, 0=unhealthy) |
 | `gateway_circuit_breaker_state` | Gauge | `backend` | Circuit state (0=closed, 1=open, 2=half-open) |
 | `gateway_active_requests` | Gauge | — | Requests currently in flight |
