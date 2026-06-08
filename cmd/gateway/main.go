@@ -1,0 +1,103 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"interlude/internal/config"
+	"interlude/internal/middleware"
+	"interlude/internal/router"
+	"log"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	_ "interlude/internal/metrics"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+
+	rt, err := router.New(ctx, cfg)
+	if err != nil {
+		log.Fatalf("Failed to create router: %v", err)
+	}
+
+	validKeys := make(map[string]struct{}, len(cfg.Auth.APIKeys))
+	for _, k := range cfg.Auth.APIKeys {
+		validKeys[k] = struct{}{}
+	}
+
+	routePrefixes := make([]string, len(cfg.Routes))
+	for i, r := range cfg.Routes {
+		routePrefixes[i] = r.Prefix
+	}
+
+	handler := middleware.Logging(
+		routePrefixes,
+		middleware.RateLimit(cfg.RateLimit)(
+			middleware.Auth(validKeys)(rt),
+		),
+	)
+
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler: handler,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	metricsSrv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Server.MetricsPort),
+		Handler: mux,
+	}
+
+	go func() {
+		slog.Info("metrics server started", "addr", metricsSrv.Addr)
+		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("metrics server failed: %v", err)
+		}
+	}()
+
+	go func() {
+		slog.Info("gateway started", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("gateway server failed: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	stop() // release signal resources
+
+	slog.Info("shutdown signal received, draining connections")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("gateway shutdown error", "err", err)
+	}
+	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("metrics server shutdown error", "err", err)
+	}
+
+	slog.Info("shutdown complete")
+}

@@ -19,14 +19,13 @@ func New(backends []*health.Backend) *Balancer {
 }
 
 func (b *Balancer) Next() (*health.Backend, error) {
-	n := len(b.backends)
-
-	for range n {
-		idx := b.counter.Add(1) % uint64(n) // safe against uint64 overflow
+	n := uint64(len(b.backends))
+	start := b.counter.Add(1)
+	for i := range n {
+		idx := (start + i) % n
 		if b.backends[idx].IsHealthy() {
 			return b.backends[idx], nil
 		}
 	}
 	return nil, errors.New("no healthy backend available")
-
 }

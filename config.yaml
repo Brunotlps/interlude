@@ -11,13 +11,6 @@ rate_limit:
   requests_per_second: 10
   burst: 20
 
-routes:
-  - prefix: "/api/users"
-    backends:
-      - "http://localhost:3001"
-      - "http://localhost:3002"
-      - "http://localhost:3003"
-
 health_check:
   interval: 10s
   timeout: 5s
@@ -29,3 +22,10 @@ circuit_breaker:
 
 retry:
   max_attempts: 3
+
+routes:
+  - prefix: "/api/users"
+    backends:
+      - "http://localhost:3001"
+      - "http://localhost:3002"
+      - "http://localhost:3003"

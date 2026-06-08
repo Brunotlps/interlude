@@ -1,5 +1,5 @@
 # Compiled binary
-gateway
+/gateway
 *.exe
 *.out
 
