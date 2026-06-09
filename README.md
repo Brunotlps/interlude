@@ -49,12 +49,14 @@ cd interlude
 docker-compose up
 ```
 
-| Service    | URL                           |
-|------------|-------------------------------|
-| Gateway    | http://localhost:8080         |
-| Metrics    | http://localhost:9091/metrics |
-| Prometheus | http://localhost:9090         |
-| Grafana    | http://localhost:3000         |
+| Service    | URL                           | Credentials  |
+|------------|-------------------------------|--------------|
+| Gateway    | http://localhost:8080         | —            |
+| Metrics    | http://localhost:9091/metrics | —            |
+| Prometheus | http://localhost:9090         | —            |
+| Grafana    | http://localhost:3000         | admin/admin  |
+
+The Grafana dashboard **"Interlude Gateway"** is provisioned automatically — no manual setup required.
 
 Make a request:
 
@@ -127,11 +129,11 @@ All metrics are exposed at `:9091/metrics` in Prometheus text format.
 |--------|------|--------|-------------|
 | `gateway_requests_total` | Counter | `method`, `path`, `status` | Total proxied requests |
 | `gateway_request_duration_seconds` | Histogram | `method`, `path` | Request latency |
-
-> `path` is normalized to the matched route prefix (e.g. `/api/users`, not `/api/users/42`) to prevent high-cardinality label explosion in Prometheus.
 | `gateway_backend_health` | Gauge | `backend` | Backend health (1=healthy, 0=unhealthy) |
 | `gateway_circuit_breaker_state` | Gauge | `backend` | Circuit state (0=closed, 1=open, 2=half-open) |
 | `gateway_active_requests` | Gauge | — | Requests currently in flight |
+
+> `path` is normalized to the matched route prefix (e.g. `/api/users`, not `/api/users/42`) to prevent high-cardinality label explosion in Prometheus.
 
 ## Development
 
@@ -163,6 +165,11 @@ docker build -t interlude .
 ├── Dockerfile                   # Multi-stage build (builder → scratch)
 ├── docker-compose.yaml          # Full stack: gateway, backends, Prometheus, Grafana
 ├── prometheus.yml               # Prometheus scrape config
+├── grafana/
+│   ├── provisioning/            # Auto-loaded by Grafana on startup
+│   │   ├── datasources/         # Prometheus datasource
+│   │   └── dashboards/          # Dashboard provider config
+│   └── dashboards/              # Dashboard JSON (Interlude Gateway)
 └── internal/
     ├── balancer/                # Round-robin load balancer
     ├── breaker/                 # Circuit breaker (3-state CAS)
