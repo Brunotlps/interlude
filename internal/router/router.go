@@ -75,6 +75,9 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var resp *http.Response
+
+		var reachedBackend bool
+
 		for i := 0; i < rt.maxAttempts; i++ {
 			backend, err := ro.balancer.Next()
 			if err != nil {
@@ -87,6 +90,7 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			reachedBackend = true
 			resp, err = ro.proxies[backend.URL].Do(r)
 			if err != nil {
 				cb.RecordFailure()
@@ -100,8 +104,13 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		if resp == nil {
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			fmt.Fprintf(w, `{"error": "no backends available"}`)
+			if reachedBackend {
+				w.WriteHeader(http.StatusBadGateway)
+				fmt.Fprintf(w, `{"error": "backend unavailable"}`)
+			} else {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				fmt.Fprintf(w, `{"error": "no backends available"}`)
+			}
 			return
 		}
 
