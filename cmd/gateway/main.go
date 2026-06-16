@@ -71,21 +71,28 @@ func main() {
 		Handler: mux,
 	}
 
+	errCh := make(chan error, 2)
+
 	go func() {
 		slog.Info("metrics server started", "addr", metricsSrv.Addr)
 		if err := metricsSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("metrics server failed: %v", err)
+			errCh <- fmt.Errorf("metrics server: %w", err)
 		}
 	}()
 
 	go func() {
 		slog.Info("gateway started", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("gateway server failed: %v", err)
+			errCh <- fmt.Errorf("gateway server: %w", err)
 		}
 	}()
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+		// normal shutdown via SIGTERM or interrupt
+	case err := <-errCh:
+		slog.Error("server error, initiating shutdown", "err", err)
+	}
 	stop() // release signal resources
 
 	slog.Info("shutdown signal received, draining connections")
