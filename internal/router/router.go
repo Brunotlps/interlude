@@ -6,6 +6,7 @@ import (
 	"interlude/internal/balancer"
 	"interlude/internal/breaker"
 	"interlude/internal/config"
+	"interlude/internal/ctxkey"
 	"interlude/internal/health"
 	"interlude/internal/pathutil"
 	"interlude/internal/proxy"
@@ -72,6 +73,10 @@ func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, ro := range rt.routes {
 		if !pathutil.HasPathPrefix(r.URL.Path, ro.prefix) {
 			continue
+		}
+
+		if ptr, ok := r.Context().Value(ctxkey.RouteLabelKey{}).(*string); ok {
+			*ptr = ro.prefix
 		}
 
 		var resp *http.Response
