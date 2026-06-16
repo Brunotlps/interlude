@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -92,12 +93,24 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("gateway shutdown error", "err", err)
-	}
-	if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("metrics server shutdown error", "err", err)
-	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("gateway shutdown error", "err", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if err := metricsSrv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("metrics server shutdown error", "err", err)
+		}
+	}()
+
+	wg.Wait()
 
 	slog.Info("shutdown complete")
 }
