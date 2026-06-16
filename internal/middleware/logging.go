@@ -71,10 +71,12 @@ func Logging(routePrefixes []string, next http.Handler) http.Handler {
 
 		next.ServeHTTP(rw, r)
 
+		elapsed := time.Since(start)
+
 		routeLabel := norm.normalize(r.URL.Path)
 
 		metrics.RequestsTotal.WithLabelValues(r.Method, routeLabel, strconv.Itoa(rw.statusCode)).Inc()
-		metrics.RequestDuration.WithLabelValues(r.Method, routeLabel).Observe(time.Since(start).Seconds())
+		metrics.RequestDuration.WithLabelValues(r.Method, routeLabel).Observe(elapsed.Seconds())
 
 		level := slog.LevelInfo
 		if rw.statusCode >= 500 {
@@ -87,7 +89,7 @@ func Logging(routePrefixes []string, next http.Handler) http.Handler {
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rw.statusCode,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", elapsed.Milliseconds(),
 			"remote_addr", r.RemoteAddr,
 		)
 	})
