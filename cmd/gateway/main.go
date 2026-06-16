@@ -47,13 +47,7 @@ func main() {
 		validKeys[k] = struct{}{}
 	}
 
-	routePrefixes := make([]string, len(cfg.Routes))
-	for i, r := range cfg.Routes {
-		routePrefixes[i] = r.Prefix
-	}
-
 	handler := middleware.Logging(
-		routePrefixes,
 		middleware.RateLimit(cfg.RateLimit)(
 			middleware.Auth(validKeys)(rt),
 		),

@@ -9,11 +9,11 @@
 package middleware
 
 import (
+	"context"
+	"interlude/internal/ctxkey"
 	"interlude/internal/metrics"
-	"interlude/internal/pathutil"
 	"log/slog"
 	"net/http"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -35,36 +35,17 @@ func newResponseWriter(w http.ResponseWriter) *wrappedWriter {
 	}
 }
 
-// routeNormalizer matches a raw path to its configured route prefix,
-// bounding Prometheus label cardinality to the number of configured routes.
-type routeNormalizer struct {
-	prefixes []string // sorted longest-first, mirrors router priority
-}
-
-func newRouteNormalizer(prefixes []string) *routeNormalizer {
-	sorted := make([]string, len(prefixes))
-	copy(sorted, prefixes)
-	sort.Slice(sorted, func(i, j int) bool {
-		return len(sorted[i]) > len(sorted[j])
-	})
-	return &routeNormalizer{prefixes: sorted}
-}
-
-func (n *routeNormalizer) normalize(path string) string {
-	for _, p := range n.prefixes {
-		if pathutil.HasPathPrefix(path, p) {
-			return p
-		}
-	}
-	return "unknown"
-}
-
-func Logging(routePrefixes []string, next http.Handler) http.Handler {
-	norm := newRouteNormalizer(routePrefixes)
-
+func Logging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rw := newResponseWriter(w)
+
+		// Allocate a label slot and share it with downstream handlers via context.
+		// The router writes the matched prefix through this pointer; we read it back
+		// after ServeHTTP returns. A pointer is necessary because r.WithContext
+		// returns a new *http.Request — a plain string value would not propagate back.
+		routeLabel := new(string)
+		r = r.WithContext(context.WithValue(r.Context(), ctxkey.RouteLabelKey{}, routeLabel))
 
 		metrics.ActiveRequests.Inc()
 		defer metrics.ActiveRequests.Dec()
@@ -73,10 +54,13 @@ func Logging(routePrefixes []string, next http.Handler) http.Handler {
 
 		elapsed := time.Since(start)
 
-		routeLabel := norm.normalize(r.URL.Path)
+		label := *routeLabel
+		if label == "" {
+			label = "unknown"
+		}
 
-		metrics.RequestsTotal.WithLabelValues(r.Method, routeLabel, strconv.Itoa(rw.statusCode)).Inc()
-		metrics.RequestDuration.WithLabelValues(r.Method, routeLabel).Observe(elapsed.Seconds())
+		metrics.RequestsTotal.WithLabelValues(r.Method, label, strconv.Itoa(rw.statusCode)).Inc()
+		metrics.RequestDuration.WithLabelValues(r.Method, label).Observe(elapsed.Seconds())
 
 		level := slog.LevelInfo
 		if rw.statusCode >= 500 {
