@@ -10,11 +10,11 @@ package middleware
 
 import (
 	"interlude/internal/metrics"
+	"interlude/internal/pathutil"
 	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -52,7 +52,7 @@ func newRouteNormalizer(prefixes []string) *routeNormalizer {
 
 func (n *routeNormalizer) normalize(path string) string {
 	for _, p := range n.prefixes {
-		if strings.HasPrefix(path, p) {
+		if pathutil.HasPathPrefix(path, p) {
 			return p
 		}
 	}
