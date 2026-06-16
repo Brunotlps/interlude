@@ -7,12 +7,12 @@ import (
 	"interlude/internal/breaker"
 	"interlude/internal/config"
 	"interlude/internal/health"
+	"interlude/internal/pathutil"
 	"interlude/internal/proxy"
 	"io"
 	"log/slog"
 	"net/http"
 	"sort"
-	"strings"
 )
 
 type route struct {
@@ -70,7 +70,7 @@ func New(ctx context.Context, cfg *config.Config) (*Router, error) {
 // Called for every request that arrives at the gateway.
 func (rt *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, ro := range rt.routes {
-		if !strings.HasPrefix(r.URL.Path, ro.prefix) {
+		if !pathutil.HasPathPrefix(r.URL.Path, ro.prefix) {
 			continue
 		}
 
